@@ -18,13 +18,7 @@ namespace BLK10.Iterator
             : base()
         {
         }
-
-        internal protected Corout(T result)
-            : base()
-        {
-            this._result = result;
-        }
-
+        
         internal protected Corout(Func<Action<T>, IEnumerator> routine)
             : base()
         {            
@@ -34,8 +28,8 @@ namespace BLK10.Iterator
             }
             catch (Exception ex)
             {
-                this.AddError(ex);
-                this.Complete();
+                this.AppendError(ex);
+                this.Callback();
             }         
         }
 
@@ -48,126 +42,56 @@ namespace BLK10.Iterator
             }
             catch (Exception ex)
             {
-                this.AddError(ex);
-                this.Complete();
+                this.AppendError(ex);
+                this.Callback();
             }            
         }
 
         #endregion
-        
-                
+                        
         public virtual T Result
         {
             get { return (this._result); }
             protected set { this._result = value; }
         }
-
-
+        
         #region "METHODS"
-
-        public override void Start()
-        {
-            this.Start(this.Type, this.ThrowError);
-        }
-
-        public override void Start(ECoroutType type)
-        {
-            this.Start(type, this.ThrowError);
-        }
-
-        public override void Start(ECoroutType type, bool forceThrowError)
-        {
-            var scheduler = Scheduler.Instance;
-
-            if (scheduler == null)
-                throw new NullReferenceException("Coroutine could not be started.");
-
-            if (this.Status != ECoroutStatus.Created)
-                throw new Exception("Coroutine already scheduled.");
-
-            this.Type       = type;
-            this.ThrowError = forceThrowError;
-            scheduler.SubmitCorout(this);
-        }
-
-
-        public Corout<T> OnComplete(Action<Corout<T>> callback)
+        
+        public Corout<T> OnSucceed(Action<Corout<T>> callback)
         {
             if (callback == null)
                 throw new ArgumentNullException("callback");
 
-            base.OnComplete(co => callback(this));
+            base.OnSucceed(co => callback(this));
             return (this);
         }
-       
-        public new Corout<T> OnError<U>(Action<U, CoroutToken> errorHandler) where U : Exception
+
+        public Corout<T> OnCancel(Action<Corout<T>> callback)
+        {
+            if (callback == null)
+                throw new ArgumentNullException("callback");
+
+            base.OnCancel(co => callback(this));
+            return (this);
+        }
+
+        public Corout<T> OnCatch<U>(Action<U, Corout<T>> errorHandler) where U : Exception
         {
             if (errorHandler == null)
                 throw new ArgumentNullException("errorHandler");
 
-            return (this.OnComplete(co =>
-            {
-                if (co.Error != null)
-                {                    
-                    if (typeof(U) == typeof(AggregateException))
-                    {
-                        errorHandler(co.Error as U, co.Token);
-
-                        co.Error  = null;
-                        co.Status = ECoroutStatus.RanToCompletion;                      
-                    }
-                    else
-                    {
-                        foreach (var except in co.Error.Exceptions)
-                        {
-                            var ex = except as U;
-                            if (ex != null)
-                            {
-                                errorHandler(ex, co.Token);                                
-                                co.RemoveError(ex);
-                            }
-                        }
-
-                        if (co.Error.ExceptionsCount == 0)
-                        {
-                            co.Error  = null;
-                            co.Status = ECoroutStatus.RanToCompletion;
-                        }                      
-                    }
-                }
-            }));
+            base.OnCatch<U>((ex, co) => errorHandler(ex, this));
+            
+            return (this);
         }
 
-        public new Corout<T> ClearError<U>() where U : Exception
-        {            
-            return (this.OnComplete(co =>
-            {
-                if (co.Error != null)
-                {
-                    if (typeof(U) == typeof(AggregateException))
-                    {                        
-                        co.Error = null;
-                        co.Status = ECoroutStatus.RanToCompletion;
-                    }
-                    else
-                    {
-                        foreach (var except in co.Error.Exceptions)
-                        {
-                            var ex = except as U;
-                            if (ex != null)
-                            {                                
-                                co.RemoveError(ex);
-                            }
-                        }
+        public Corout<T> OnFinally(Action<Corout<T>> callback)
+        {
+            if (callback == null)
+                throw new ArgumentNullException("callback");
 
-                        if (co.Error.ExceptionsCount == 0)
-                        {
-                            co.Error = null;
-                            co.Status = ECoroutStatus.RanToCompletion;
-                        }
-                    }
-                }
-            }));
+            base.OnFinally(co => callback(this));
+            return (this);
         }
 
 
@@ -176,7 +100,7 @@ namespace BLK10.Iterator
             if (continuation == null)
                 throw new ArgumentNullException("continuation");
 
-            return (new CoroutContinuation(this, () =>
+            return (new CoroutRelay(this, () =>
             {
                 var res = this.Result;                               
                 return (continuation(res));
@@ -188,7 +112,7 @@ namespace BLK10.Iterator
             if (continuation == null)
                 throw new ArgumentNullException("continuation");
 
-            return (new CoroutContinuation<U>(this, () =>
+            return (new CoroutRelay<U>(this, () =>
             {
                 var res = this.Result;
                 return (continuation(res));
@@ -214,7 +138,6 @@ namespace BLK10.Iterator
         }
         
         #endregion
-
         
     }    
 }

@@ -2,15 +2,15 @@
 {
     public enum ECoroutStatus
     {
-        /// <summary>The coroutine has been initialized but has not yet been scheduled.</summary>
-        Created,
-        /// <summary>The coroutine is running but has not yet completed.</summary>
-        Running,
-        /// <summary>The coroutine completed execution successfully.</summary>
-        RanToCompletion,        
-        /// <summary>The coroutine acknowledged cancellation.</summary>
+        /// <summary>The coroutine has been created but has not yet been scheduled.</summary>
+        Created = 0,
+        /// <summary>The coroutine has been scheduled.</summary>
+        Scheduled,
+        /// <summary>The coroutine succeeded.</summary>
+        Succeeded,
+        /// <summary>The coroutine was canceled.</summary>
         Canceled,
-        /// <summary>The coroutine completed due to an unhandled exception.</summary>
+        /// <summary>The coroutine faulted.</summary>
         Faulted
     }
 }

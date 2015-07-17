@@ -26,13 +26,24 @@ namespace BLK10.Iterator
 
 
         #region "PORPERTIES"
-
+        
         public IEnumerable<Exception> Exceptions
         {
             get { return (this._exceptions.ToArray()); }
         }
-        
-        public int ExceptionsCount
+                
+        public Exception this[int index]
+        {
+            get
+            {
+                if ((index < 0) || (index >= this._exceptions.Length))
+                    throw new IndexOutOfRangeException("index");
+
+                return (this._exceptions[index]);
+            }
+        }
+
+        public int Count
         {
             get { return (this._exceptions.Length); }
         }
@@ -41,14 +52,15 @@ namespace BLK10.Iterator
         {
             get
             {
-                var count = this._exceptions.Length;
+                var sb = new System.Text.StringBuilder()
+                                        .AppendLine(string.Format("{0} error(s): ", this._exceptions.Length));
 
-                if (count == 1)
-                    return (this._exceptions[0].Message);
-                else if (count > 1)
-                    return (string.Format("AggregateException: {0} errors", count));
-                else
-                    return (base.Message);
+                for (int i = 0; i < this._exceptions.Length; i++)
+                {
+                    sb.AppendLine(this._exceptions[i].Message);
+                }
+
+                return (sb.ToString());                
             }
         }
 
@@ -113,9 +125,9 @@ namespace BLK10.Iterator
                 .AppendLine()
                 .AppendLine("inner exceptions:");
 
-            foreach (var ex in this.Exceptions)
+            for (int i = 0; i < this._exceptions.Length; i++)
             {
-                sb.AppendLine(ex.ToString());
+                sb.AppendLine(this._exceptions[i].ToString());
             }
 
             return (sb.ToString());

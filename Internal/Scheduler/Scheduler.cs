@@ -13,12 +13,11 @@ namespace BLK10.Iterator
 {   
     [DisallowMultipleComponent]
     [RequireComponent(typeof(RuntimeToolbox))]
-    internal sealed class Scheduler : MonoBehaviour, IScheduler
+    public sealed class Scheduler : MonoBehaviour, IScheduler
     {        
         private List<Corout>     _runningCorouts;
         private Queue<Corout>    _coroutsToRemove;
-        
-        private int              _firstIndex;
+                
         private ESchedulerStatus _status;
         private bool             _initialized;
         
@@ -42,9 +41,7 @@ namespace BLK10.Iterator
         private void LateUpdate()
         {            
             if (this._status == ESchedulerStatus.Play)
-            {
                 this._step++;
-            }
         }
 
         private void OnApplicationQuit()
@@ -63,7 +60,7 @@ namespace BLK10.Iterator
             get { return (this._status); }
         }
                 
-        public int Count
+        public int CoroutCount
         {
             get { return (this._runningCorouts.Count); }
         }
@@ -118,7 +115,7 @@ namespace BLK10.Iterator
 
         /// <summary></summary>
         /// <param name="coroutine"></param>               
-        public void SubmitCorout(Corout coroutine)
+        public void Append(Corout coroutine)
         {
             if (coroutine == null)
                 throw new ArgumentNullException("coroutine");
@@ -126,35 +123,48 @@ namespace BLK10.Iterator
             if (this._runningCorouts.Contains(coroutine))
                 throw new Exception("coroutine already scheduled.");
                         
-            switch (coroutine.Type)
+            if (coroutine.IsSynchronous)
             {
-                case ECoroutType.Synchrone:                    
-                    this._runningCorouts.Insert(0, coroutine);
-                    this._firstIndex++;
-                    this.Play(); 
-                    this.Run();
-                    break;
+                this._runningCorouts.Insert(0, coroutine);                
+                this.Play();
+                this.Run();
+            }
+            else
+            {                
+                switch (coroutine.AsyncMode)
+                {
+                    case EAsyncMode.Priorize:
+                        this._runningCorouts.Insert(0, coroutine);                        
+                        this.Play();
+                        break;
 
-                case ECoroutType.Priority:
-                    this._runningCorouts.Insert(0, coroutine);
-                    this._firstIndex++;
-                    this.Play();                    
-                    break;
+                    case EAsyncMode.Deferize:                        
+                        this._runningCorouts.Add(coroutine);
+                        this.Play();
+                        break;
 
-                case ECoroutType.LazyPriority:
-                    this._runningCorouts.Insert(this._firstIndex, coroutine);
-                    this._firstIndex++;
-                    this.Play();                     
-                    break;
-
-                case ECoroutType.Asynchrone:
-                default:
-                    this._runningCorouts.Add(coroutine);
-                    this.Play();                    
-                    break;
+                    case EAsyncMode.Normal:
+                    default:
+                         this._runningCorouts.Add(coroutine);
+                         this.Play();
+                        break;
+                }
             }
         }
         
+        /// <summary></summary>
+        /// <param name="coroutine"></param>
+        public bool Contains(Corout coroutine)
+        {
+            if (coroutine == null)
+                throw new ArgumentNullException("coroutine");
+
+            if (this._runningCorouts != null)
+                return (this._runningCorouts.Contains(coroutine));
+
+            return (false);
+        }
+
         #endregion
 
 
@@ -169,8 +179,7 @@ namespace BLK10.Iterator
 
                 this._timer      = this._timer ?? new Stopwatch();
                 this._timer.Reset();
-                this._step       = 0;
-                this._firstIndex = 0;
+                this._step       = 0;                
                 this._status     = ESchedulerStatus.Stop;                
 
                 this._initialized = true;
@@ -184,9 +193,7 @@ namespace BLK10.Iterator
                 for (int i = 0; i < this._runningCorouts.Count; ++i)
                 {
                     if (!this.RunAtIndex(i))
-                    {
                         break;
-                    }
                 }                
             }
 
@@ -196,25 +203,11 @@ namespace BLK10.Iterator
 
                 if (corout != null)
                 {                    
-                    if ((corout.Type == ECoroutType.Synchrone) ||
-                        (corout.Type == ECoroutType.Priority) ||
-                        (corout.Type == ECoroutType.LazyPriority))
-                    {
-                        this._firstIndex--;
-                    }
-                    
                     this._runningCorouts.Remove(corout);
 
-                    if (corout.ThrowError && (corout.Error != null))
-                    {
-                        foreach (var ex in corout.Error.Exceptions)
-                        {
-                            throw ex;
-                        }
-                    }
+                    if (corout.Exception != null)
+                        throw corout.Exception;
 
-                    corout.ThrowIfCanceledWithReason();
-                    
                     var d = corout as IDisposable;
                     if (d != null)
                     {
@@ -234,31 +227,31 @@ namespace BLK10.Iterator
             {
                 if (corout.IsFence)
                 {                    
-                    if (index != 0)
+                    if (index > corout.FenceIndex)
                         return (false);
-
-                    corout.MoveNext();
+                    
+                    corout.MoveNext();                    
+                    //while (corout.MoveNext()) { };
+                    //return (true);
                 }
 
                 bool nxt = false;
 
                 do
-                {                    
+                {
                     nxt = corout.MoveNext();
 
                     if (!nxt)
                         this._coroutsToRemove.Enqueue(corout);
 
-                } while (nxt && (corout.Type == ECoroutType.Synchrone));
+                } while (nxt && corout.IsSynchronous);
 
-                if ((corout.Type == ECoroutType.LazyPriority) ||
-                    (corout.Type == ECoroutType.Priority))
-                {
+                if ((corout.AsyncMode == EAsyncMode.Priorize) || (corout.AsyncMode == EAsyncMode.Deferize))
                     return (false);
-                }
             }
             else
-                this._runningCorouts.RemoveAt(index);            
+                this._runningCorouts.RemoveAt(index);
+            
 
             return (true);
         }
@@ -287,8 +280,6 @@ namespace BLK10.Iterator
                     corout = null;
                 }
             }
-
-            this._firstIndex = 0;
         }
 
         #endregion

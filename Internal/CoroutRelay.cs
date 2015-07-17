@@ -4,17 +4,16 @@
 namespace BLK10.Iterator
 {
 
-    internal class CoroutContinuation : Corout
+    internal class CoroutRelay : Corout
     {
         private Corout       _coroutine;        
         private Func<Corout> _continuation;
         
 
-        internal CoroutContinuation(Corout coroutine, Func<Corout> continuation)
+        internal CoroutRelay(Corout coroutine, Func<Corout> continuation)
         {            
-            this._coroutine          = coroutine;
-            this._coroutine.Token.Id = this.Token.Id;
-            this._continuation       = continuation;
+            this._coroutine    = coroutine;            
+            this._continuation = continuation;
         }
 
 
@@ -37,16 +36,16 @@ namespace BLK10.Iterator
             if (this._coroutine.MoveNext())
                 return (true);
 
-            if (this._coroutine.Error != null)
+            if (this._coroutine.Exception != null)
             {
-                this.AddError(this._coroutine.Error);
+                this.AppendError(this._coroutine.Exception);
                 this.Resume();
                 return (false);
             }
 
             if (this._coroutine.Token.IsCanceled)
             {
-                this.Token.Cancel(this._coroutine.Token.CancelReason);                
+                this.Token.CancelError(this._coroutine.Token.CancelException);                
                 this.Resume();
                 return (false);                
             }
@@ -54,9 +53,8 @@ namespace BLK10.Iterator
             if (this._continuation != null)
             {
                 this.DisposeCurrent();                
-                this._coroutine          = this._continuation();
-                this._coroutine.Token.Id = this.Token.Id;
-                this._continuation       = null;
+                this._coroutine    = this._continuation();                
+                this._continuation = null;
                 return (true);
             }
             
@@ -80,7 +78,7 @@ namespace BLK10.Iterator
 
         private void Resume()
         {            
-            this.Complete();
+            this.Callback();
             this.DisposeCurrent();
 
             if (this._continuation != null)
@@ -97,17 +95,16 @@ namespace BLK10.Iterator
 
     }
 
-    internal class CoroutContinuation<U> : Corout<U>
+    internal class CoroutRelay<U> : Corout<U>
     {
         private Corout          _coroutine;        
         private Func<Corout<U>> _continuation;
 
 
-        internal CoroutContinuation(Corout coroutine, Func<Corout<U>> continuation)
+        internal CoroutRelay(Corout coroutine, Func<Corout<U>> continuation)
         {
-            this._coroutine          = coroutine;
-            this._coroutine.Token.Id = this.Token.Id;
-            this._continuation       = continuation;
+            this._coroutine    = coroutine;            
+            this._continuation = continuation;
         }
 
 
@@ -142,9 +139,9 @@ namespace BLK10.Iterator
                 return (false);
             }
 
-            if (this._coroutine.Error != null)
+            if (this._coroutine.Exception != null)
             {
-                this.AddError(this._coroutine.Error);
+                this.AppendError(this._coroutine.Exception);
                 this.AssignResult();                
                 this.Resume();
                 return (false);
@@ -153,9 +150,8 @@ namespace BLK10.Iterator
             if (this._continuation != null)
             {
                 this.DisposeCurrent();                
-                this._coroutine          = this._continuation();
-                this._coroutine.Token.Id = this.Token.Id;
-                this._continuation       = null;
+                this._coroutine    = this._continuation();                
+                this._continuation = null;
                 return (true);
             }
 
@@ -189,7 +185,7 @@ namespace BLK10.Iterator
         
         private void Resume()
         {
-            this.Complete();
+            this.Callback();
             this.DisposeCurrent();
 
             if (this._continuation != null)

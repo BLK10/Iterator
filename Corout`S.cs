@@ -4,20 +4,19 @@ using System.Collections.Generic;
 
 using UnityEngine;
 using BLK10.Collections;
+using BLK10.Iterator.Command;
 
 
 namespace BLK10.Iterator
 {
     public partial class Corout
     {
-
-
         public static Corout Create(Action<Corout> callback)
         {
             if (callback == null)
                 throw new ArgumentNullException("callback");
 
-            var co = new Corout().OnComplete(callback);
+            var co = new Corout().OnSucceed(callback);
             co.MoveNext();
 
             return (co);            
@@ -53,7 +52,7 @@ namespace BLK10.Iterator
             if (callback == null)
                 throw new ArgumentNullException("callback");
 
-            var co = new Corout<T>().OnComplete(callback);
+            var co = new Corout<T>().OnSucceed(callback);
             co.MoveNext();
 
             return (co);
@@ -76,172 +75,307 @@ namespace BLK10.Iterator
         }
 
         
-        public static Corout<T> FromResult<T>(T value)
+
+        public static Corout WhenAll(params Func<IEnumerator>[] routines)
         {
-            return (new Corout<T>(value));
-        }
+            if (routines == null)
+                throw new ArgumentNullException("routines");
+            if (routines.Length == 0)
+                throw new ArgumentException("routines array is empty.");
 
+            List<Corout> lCorouts = new List<Corout>(routines.Length);
 
-        public static Corout WhenAll(params Corout[] coroutines)
-        {
-            if (coroutines == null)
-                throw new ArgumentNullException("coroutines");
-
-            if (coroutines.Length == 0)
-                throw new ArgumentException("coroutines array is empty.");
-
-            List<Corout> cor = new List<Corout>(coroutines.Length);
-            List<Action> act = new List<Action>(coroutines.Length);
-
-            for (int i = 0; i < coroutines.Length; i++)
+            for (int i = 0; i < routines.Length; i++)
             {
-                var co = coroutines[i];
+                var rout = routines[i];
 
-                if (co == null)
-                    throw new ArgumentException("coroutine could not be null.");
+                if (rout == null)
+                    throw new ArgumentException("routine could not be null.");
 
-                if ((i + 1) < coroutines.Length)
+                if ((i + 1) < routines.Length)
                 {
-                    if (Array.FindIndex(coroutines, i + 1, (c) => { return (c.Equals(co)); }) > -1)
-                        throw new ArgumentException("coroutines could not be equal.");
+                    if (Array.FindIndex(routines, i + 1, (r) => { return (r.Equals(rout)); }) > -1)
+                        throw new ArgumentException("routines could not be equal.");
                 }
 
-                cor.Add(co);
-                act.Add(co.Complete);
+                lCorouts.Add(new Corout(rout));                
             }
 
-            return (new CoroutParallelization(cor.ToArray(), act.ToArray()));
-        }
-       
-        public static Corout<Tuple<KeyValuePair<U, bool>, KeyValuePair<V, bool>>>
-            WhenAll<U, V>(Corout<U> corout01, Corout<V> corout02)
-        {
-            if (corout01 == null)
-                throw new ArgumentNullException("corout01");
-            if (corout02 == null)
-                throw new ArgumentNullException("corout02");
-
-            if (corout01.Equals(corout02))
-            {
-                throw new ArgumentException("coroutines could not be equal.");
-            }
-
-            Action[] act = new Action[2];
-            act[0] = corout01.Complete;
-            act[1] = corout02.Complete;
-
-            return (new CoroutParallelization<U, V>(corout01, corout02, act));
+            return (new CoroutInterlace(lCorouts.ToArray()));
         }
 
-        public static Corout<Tuple<KeyValuePair<U, bool>, KeyValuePair<V, bool>, KeyValuePair<W, bool>>>
-            WhenAll<U, V, W>(Corout<U> corout01, Corout<V> corout02, Corout<W> corout03)
+        public static Corout WhenAll(Func<CoroutToken, IEnumerator>[] routines)
         {
-            if (corout01 == null)
-                throw new ArgumentNullException("corout01");
-            if (corout02 == null)
-                throw new ArgumentNullException("corout02");
-            if (corout03 == null)
-                throw new ArgumentNullException("corout03");
+            if (routines == null)
+                throw new ArgumentNullException("routines");
+            if (routines.Length == 0)
+                throw new ArgumentException("routines array is empty.");
 
-            if (corout01.Equals(corout02) || corout01.Equals(corout03) || corout02.Equals(corout03))
+            List<Corout> lCorouts = new List<Corout>(routines.Length);
+
+            for (int i = 0; i < routines.Length; i++)
             {
-                throw new ArgumentException("coroutines could not be equal.");
+                var rout = routines[i];
+
+                if (rout == null)
+                    throw new ArgumentException("routine could not be null.");
+
+                if ((i + 1) < routines.Length)
+                {
+                    if (Array.FindIndex(routines, i + 1, (r) => { return (r.Equals(rout)); }) > -1)
+                        throw new ArgumentException("routines could not be equal.");
+                }
+
+                lCorouts.Add(new Corout(rout));
             }
 
-            Action[] act = new Action[3];
-            act[0] = corout01.Complete;
-            act[1] = corout02.Complete;
-            act[2] = corout03.Complete;
-
-            return (new CoroutParallelization<U, V, W>(corout01, corout02, corout03, act));
+            return (new CoroutInterlace(lCorouts.ToArray()));
         }
 
-        public static Corout<Tuple<KeyValuePair<U, bool>, KeyValuePair<V, bool>, KeyValuePair<W, bool>, KeyValuePair<X, bool>>>
-            WhenAll<U, V, W, X>(Corout<U> corout01, Corout<V> corout02, Corout<W> corout03, Corout<X> corout04)
+        public static Corout<Tuple<U, V>>
+            WhenAll<U, V>(Func<Action<U>, IEnumerator> rout01, Func<Action<V>, IEnumerator> rout02)
         {
-            if (corout01 == null)
-                throw new ArgumentNullException("corout01");
-            if (corout02 == null)
-                throw new ArgumentNullException("corout02");
-            if (corout03 == null)
-                throw new ArgumentNullException("corout03");
-            if (corout04 == null)
-                throw new ArgumentNullException("corout04");
+            if (rout01 == null)
+                throw new ArgumentNullException("rout01");
+            if (rout02 == null)
+                throw new ArgumentNullException("rout02");
 
-            if (corout01.Equals(corout02) || corout01.Equals(corout03) ||
-                corout01.Equals(corout04) || corout02.Equals(corout03) ||
-                corout02.Equals(corout04) || corout03.Equals(corout04))
-            {
-                throw new ArgumentException("coroutines could not be equal.");
-            }
+            if (rout01.Equals(rout02))
+                throw new ArgumentException("routines could not be equal.");
 
-            Action[] act = new Action[4];
-            act[0] = corout01.Complete;
-            act[1] = corout02.Complete;
-            act[2] = corout03.Complete;
-            act[3] = corout04.Complete;
+            var corout01 = new Corout<U>(rout01);
+            var corout02 = new Corout<V>(rout02);
 
-            return (new CoroutParallelization<U, V, W, X>(corout01, corout02, corout03, corout04, act));
+            return (new CoroutInterlace<U, V>(corout01, corout02));
         }
 
-        public static Corout<Tuple<KeyValuePair<U, bool>, KeyValuePair<V, bool>, KeyValuePair<W, bool>, KeyValuePair<X, bool>, KeyValuePair<Y, bool>>>
-            WhenAll<U, V, W, X, Y>(Corout<U> corout01, Corout<V> corout02, Corout<W> corout03, Corout<X> corout04, Corout<Y> corout05)
+        public static Corout<Tuple<U, V>>
+            WhenAll<U, V>(Func<Action<U>, CoroutToken, IEnumerator> rout01, Func<Action<V>, CoroutToken, IEnumerator> rout02)
         {
-            if (corout01 == null)
-                throw new ArgumentNullException("corout01");
-            if (corout02 == null)
-                throw new ArgumentNullException("corout02");
-            if (corout03 == null)
-                throw new ArgumentNullException("corout03");
-            if (corout04 == null)
-                throw new ArgumentNullException("corout04");
-            if (corout05 == null)
-                throw new ArgumentNullException("corout05");
+            if (rout01 == null)
+                throw new ArgumentNullException("rout01");
+            if (rout02 == null)
+                throw new ArgumentNullException("rout02");
 
-            if (corout01.Equals(corout02) || corout01.Equals(corout03) ||
-                corout01.Equals(corout04) || corout01.Equals(corout05) ||
-                corout02.Equals(corout03) || corout02.Equals(corout04) ||
-                corout02.Equals(corout05) || corout03.Equals(corout04) ||
-                corout03.Equals(corout05) || corout04.Equals(corout05))
-            {
-                throw new ArgumentException("coroutines could not be equal.");
-            }
+            if (rout01.Equals(rout02))
+                throw new ArgumentException("routines could not be equal.");
 
-            Action[] act = new Action[5];
-            act[0] = corout01.Complete;
-            act[1] = corout02.Complete;
-            act[2] = corout03.Complete;
-            act[3] = corout04.Complete;
-            act[4] = corout05.Complete;
+            var corout01 = new Corout<U>(rout01);
+            var corout02 = new Corout<V>(rout02);
 
-            return (new CoroutParallelization<U, V, W, X, Y>(corout01, corout02, corout03, corout04, corout05, act));
+            return (new CoroutInterlace<U, V>(corout01, corout02));
+        }
+
+        public static Corout<Tuple<U, V, W>>
+            WhenAll<U, V, W>(Func<Action<U>, IEnumerator> rout01, Func<Action<V>, IEnumerator> rout02, Func<Action<W>, IEnumerator> rout03)
+        {
+            if (rout01 == null)
+                throw new ArgumentNullException("rout01");
+            if (rout02 == null)
+                throw new ArgumentNullException("rout02");
+            if (rout03 == null)
+                throw new ArgumentNullException("rout03");
+
+            if (rout01.Equals(rout02) || rout01.Equals(rout03) || rout02.Equals(rout03))
+                throw new ArgumentException("routines could not be equal.");
+
+            var corout01 = new Corout<U>(rout01);
+            var corout02 = new Corout<V>(rout02);
+            var corout03 = new Corout<W>(rout03);
+
+            return (new CoroutInterlace<U, V, W>(corout01, corout02, corout03));
+        }
+
+        public static Corout<Tuple<U, V, W>>
+            WhenAll<U, V, W>(Func<Action<U>, CoroutToken, IEnumerator> rout01, Func<Action<V>, CoroutToken, IEnumerator> rout02, Func<Action<W>, CoroutToken, IEnumerator> rout03)
+        {
+            if (rout01 == null)
+                throw new ArgumentNullException("rout01");
+            if (rout02 == null)
+                throw new ArgumentNullException("rout02");
+            if (rout03 == null)
+                throw new ArgumentNullException("rout03");
+
+            if (rout01.Equals(rout02) || rout01.Equals(rout03) || rout02.Equals(rout03))
+                throw new ArgumentException("routines could not be equal.");
+
+            var corout01 = new Corout<U>(rout01);
+            var corout02 = new Corout<V>(rout02);
+            var corout03 = new Corout<W>(rout03);
+
+            return (new CoroutInterlace<U, V, W>(corout01, corout02, corout03));
         }
         
-
-
-        public static void AddFence()
+        public static Corout<Tuple<U, V, W, X>>
+            WhenAll<U, V, W, X>(Func<Action<U>, IEnumerator> rout01, Func<Action<V>, IEnumerator> rout02,
+                                Func<Action<W>, IEnumerator> rout03, Func<Action<X>, IEnumerator> rout04)
         {
-            var scheduler = Scheduler.Instance;
+            if (rout01 == null)
+                throw new ArgumentNullException("rout01");
+            if (rout02 == null)
+                throw new ArgumentNullException("rout02");
+            if (rout03 == null)
+                throw new ArgumentNullException("rout03");
+            if (rout04 == null)
+                throw new ArgumentNullException("rout04");
 
-            if (scheduler == null)
-                throw new NullReferenceException("could not add fence.");
-            
-            var corout = new Corout() { _fence = true };
-            scheduler.SubmitCorout(corout);
+            if (rout01.Equals(rout02) || rout01.Equals(rout03) ||
+                rout01.Equals(rout04) || rout02.Equals(rout03) ||
+                rout02.Equals(rout04) || rout03.Equals(rout04))
+            {
+                throw new ArgumentException("routines could not be equal.");
+            }
+
+            var corout01 = new Corout<U>(rout01);
+            var corout02 = new Corout<V>(rout02);
+            var corout03 = new Corout<W>(rout03);
+            var corout04 = new Corout<X>(rout04);
+
+            return (new CoroutInterlace<U, V, W, X>(corout01, corout02, corout03, corout04));
         }
 
-        public static void AddFence(Action callBack)
+        public static Corout<Tuple<U, V, W, X>>
+            WhenAll<U, V, W, X>(Func<Action<U>, CoroutToken, IEnumerator> rout01, Func<Action<V>, CoroutToken, IEnumerator> rout02,
+                                Func<Action<W>, CoroutToken, IEnumerator> rout03, Func<Action<X>, CoroutToken, IEnumerator> rout04)
         {
-            if (callBack == null)
-                throw new ArgumentNullException("callBack");
+            if (rout01 == null)
+                throw new ArgumentNullException("rout01");
+            if (rout02 == null)
+                throw new ArgumentNullException("rout02");
+            if (rout03 == null)
+                throw new ArgumentNullException("rout03");
+            if (rout04 == null)
+                throw new ArgumentNullException("rout04");
 
-            var scheduler = Scheduler.Instance;
+            if (rout01.Equals(rout02) || rout01.Equals(rout03) ||
+                rout01.Equals(rout04) || rout02.Equals(rout03) ||
+                rout02.Equals(rout04) || rout03.Equals(rout04))
+            {
+                throw new ArgumentException("routines could not be equal.");
+            }
 
-            if (scheduler == null)
-                throw new NullReferenceException("could not add fence.");
+            var corout01 = new Corout<U>(rout01);
+            var corout02 = new Corout<V>(rout02);
+            var corout03 = new Corout<W>(rout03);
+            var corout04 = new Corout<X>(rout04);
 
-            var corout = (new Corout() { _fence = true }).OnComplete(co => callBack());
-            scheduler.SubmitCorout(corout);
+            return (new CoroutInterlace<U, V, W, X>(corout01, corout02, corout03, corout04));
+        }
+
+        public static Corout<Tuple<U, V, W, X, Y>>
+            WhenAll<U, V, W, X, Y>(Func<Action<U>, IEnumerator> rout01, Func<Action<V>, IEnumerator> rout02,
+                                   Func<Action<W>, IEnumerator> rout03, Func<Action<X>, IEnumerator> rout04, Func<Action<Y>, IEnumerator> rout05)
+        {
+            if (rout01 == null)
+                throw new ArgumentNullException("rout01");
+            if (rout02 == null)
+                throw new ArgumentNullException("rout02");
+            if (rout03 == null)
+                throw new ArgumentNullException("rout03");
+            if (rout04 == null)
+                throw new ArgumentNullException("rout04");
+            if (rout05 == null)
+                throw new ArgumentNullException("rout05");
+
+            if (rout01.Equals(rout02) || rout01.Equals(rout03) ||
+                rout01.Equals(rout04) || rout01.Equals(rout05) ||
+                rout02.Equals(rout03) || rout02.Equals(rout04) ||
+                rout02.Equals(rout05) || rout03.Equals(rout04) ||
+                rout03.Equals(rout05) || rout04.Equals(rout05))
+            {
+                throw new ArgumentException("routines could not be equal.");
+            }
+
+            var corout01 = new Corout<U>(rout01);
+            var corout02 = new Corout<V>(rout02);
+            var corout03 = new Corout<W>(rout03);
+            var corout04 = new Corout<X>(rout04);
+            var corout05 = new Corout<Y>(rout05);
+
+            return (new CoroutInterlace<U, V, W, X, Y>(corout01, corout02, corout03, corout04, corout05));
+        }
+
+        public static Corout<Tuple<U, V, W, X, Y>>
+            WhenAll<U, V, W, X, Y>(Func<Action<U>, CoroutToken, IEnumerator> rout01, Func<Action<V>, CoroutToken, IEnumerator> rout02,
+                                   Func<Action<W>, CoroutToken, IEnumerator> rout03, Func<Action<X>, CoroutToken, IEnumerator> rout04,
+                                   Func<Action<Y>, CoroutToken, IEnumerator> rout05)
+        {
+            if (rout01 == null)
+                throw new ArgumentNullException("rout01");
+            if (rout02 == null)
+                throw new ArgumentNullException("rout02");
+            if (rout03 == null)
+                throw new ArgumentNullException("rout03");
+            if (rout04 == null)
+                throw new ArgumentNullException("rout04");
+            if (rout05 == null)
+                throw new ArgumentNullException("rout05");
+
+            if (rout01.Equals(rout02) || rout01.Equals(rout03) ||
+                rout01.Equals(rout04) || rout01.Equals(rout05) ||
+                rout02.Equals(rout03) || rout02.Equals(rout04) ||
+                rout02.Equals(rout05) || rout03.Equals(rout04) ||
+                rout03.Equals(rout05) || rout04.Equals(rout05))
+            {
+                throw new ArgumentException("routines could not be equal.");
+            }
+
+            var corout01 = new Corout<U>(rout01);
+            var corout02 = new Corout<V>(rout02);
+            var corout03 = new Corout<W>(rout03);
+            var corout04 = new Corout<X>(rout04);
+            var corout05 = new Corout<Y>(rout05);
+
+            return (new CoroutInterlace<U, V, W, X, Y>(corout01, corout02, corout03, corout04, corout05));
+        }
+
+
+        public static Fence OpenFence()
+        {
+            return (new Fence(Scheduler.Instance.CoroutCount, null));
+        }
+
+        public static Fence OpenFence(Action onClose)
+        {
+            return (new Fence(Scheduler.Instance.CoroutCount, onClose));
+        }
+        
+        internal static Corout CreateFence(int startIndex)
+        {            
+            return (new Corout() { _fenceIdx = startIndex });            
+        }
+
+                
+        public static void WaitThen(int waitStep, Action then)
+        {
+            if (waitStep <= 0)
+                then();
+            else                
+                using (Corout.OpenFence())
+                    Corout.Create(Corout.IEWait(waitStep - 1)).OnFinally(co => then()).Start();
+        }
+
+        public static void WaitThen(float waitSecond, Action then)
+        {
+            if (waitSecond < 0.015f)
+                then();
+            else                
+                using (Corout.OpenFence())
+                    Corout.Create(Corout.IEWait(Scheduler.Instance.Second + waitSecond)).OnFinally(co => then()).Start();
+        }
+
+
+        private static IEnumerator IEWait(int step)
+        {            
+            for (int i = 0; i < step; i++)
+                yield return null;
+        }
+
+        private static IEnumerator IEWait(float second)
+        {
+            while ((second - Scheduler.Instance.Second) > -float.Epsilon)
+                yield return null;
+
         }
 
     }
