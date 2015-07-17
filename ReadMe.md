@@ -34,7 +34,7 @@ Iterator depends on:
 
 This library has been redesigned with one goal in mind: ["Keep it simple, stupid"](https://en.wikipedia.org/wiki/KISS_principle)... really!
 
-A samples of methods are in the 'CoroutTest' class which you can find [>> here <<]()
+A samples of methods are in the 'CoroutTest' class which you can find [>> here <<](http://github.com/BLK10/Iterator/blob/master/Editor/Test/CoroutTest.cs)
 The 'Routines' methods are not representative of the workload and their purpose is to illustrate the syntax.
 
 ----------
